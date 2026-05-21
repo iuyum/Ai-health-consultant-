@@ -1,0 +1,199 @@
+Code:
+
+Main file :
+
+
+import streamlit as st
+from pyswip import Prolog
+import subprocess
+from hospital import HospitalFinder  
+
+class Patient:
+    def __init__(self):
+        self.symptoms = []
+
+    def add_symptoms(self, symptoms):
+        self.symptoms = symptoms
+
+    def get_diagnosis(self):
+        prolog = Prolog()
+        prolog.consult("diagnosis.pl")  
+        symptoms_list = "[" + ",".join(self.symptoms) + "]"
+        result = list(prolog.query(f"diagnose({symptoms_list}, Diagnosis)"))
+        if result:
+            return result[0]['Diagnosis']
+        return "general"
+
+    def get_doctor(self, diagnosis):
+        prolog = Prolog()
+        prolog.consult("diagnosis.pl")  
+        result = list(prolog.query(f"suggest_doctor({diagnosis}, Doctor)"))
+        if result:
+            doctor = result[0]['Doctor']
+            if isinstance(doctor, bytes):
+                doctor = doctor.decode("utf-8")
+                return doctor
+        return "General Physician"
+
+    def get_lisp_advice(self, diagnosis):
+        try:
+            result = subprocess.run(
+            ["C:\\Program Files\\Steel Bank Common Lisp\\sbcl.exe", "--script", "suggestion.lisp", diagnosis],
+            capture_output=True, text=True,
+            cwd="C:\\Users\\ayyss\\OneDrive\\Desktop\\AI"
+)
+
+            return result.stdout.strip()
+        except Exception as e:
+            return f"Error getting Lisp advice: {e}"
+
+
+# UI section using streamlit
+
+st.title("AI Health Consultant")
+st.write("Select your symptoms to receive a diganosis, doctor recomendation, and AI advice.")
+
+available_symptoms = [
+    "fever", "cough", "body_ache", "chest_pain", "shortness_of_breath",
+    "sneezing", "itchy_eyes", "headache", "nausea", "sensitivity_to_light",
+    "vomiting", "diarrhea", "wheezing", "fatigue", "no_motivation",
+    "lack_of_sleep", "itchy_skin", "rash"
+]
+
+selected_symptoms = st.multiselect("Choose symptoms:", available_symptoms)
+custom_symptom = st.text_input("Other (type your own if not listed):")
+
+if custom_symptom:
+    selected_symptoms.append(custom_symptom.strip().replace(" ", "_"))
+
+if st.button("Enter"):
+    if not selected_symptoms:
+        st.warning("Please selct at least one syptom.")
+    else:
+        patient = Patient()
+        patient.add_symptoms(selected_symptoms)
+        diagnosis = patient.get_diagnosis()
+        doctor = patient.get_doctor(diagnosis)
+        advice = patient.get_lisp_advice(diagnosis)
+
+        st.subheader("🩺 Diagnosis:")
+        st.write(f"You might have: **{diagnosis.replace('_', ' ').title()}**")
+
+        if diagnosis == "general":
+            st.success("No serious issues detected.")
+        else:
+            st.subheader("Suggested Doctor:")
+            st.write(f"See a: **{doctor}**")
+
+            hospital_finder = HospitalFinder()
+            hospitals = hospital_finder.find_hospitals(doctor)
+
+            if hospitals:
+                st.subheader("Hospitals for Consultation:")
+                for hospital in hospitals:
+                    st.write(f"- {hospital}")
+            else:
+                st.warning(f"No hospitals found for {doctor}. Please check with your local healthcare provider.")
+
+        st.subheader("AI Health Suggestion:")
+        st.write(advice)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Prolog file (.pl):
+
+% Diagnosis rules
+
+diagnose(Symptoms, flu) :-
+    member(fever, Symptoms),
+    member(cough, Symptoms),
+    member(body_ache, Symptoms).
+
+diagnose(Symptoms, heart_disease) :-
+    member(chest_pain, Symptoms),
+    member(shortness_of_breath, Symptoms).
+
+diagnose(Symptoms, allergy) :-
+    member(sneezing, Symptoms),
+    member(itchy_eyes, Symptoms).
+
+diagnose(Symptoms, migraine) :-
+    member(headache, Symptoms),
+    member(sensitivity_to_light, Symptoms).
+
+diagnose(Symptoms, food_poisoning) :-
+    member(nausea, Symptoms),
+    member(vomiting, Symptoms),
+    member(diarrhea, Symptoms).
+
+diagnose(Symptoms, asthma) :-
+    member(shortness_of_breath, Symptoms),
+    member(wheezing, Symptoms),
+    member(cough, Symptoms).
+
+diagnose(Symptoms, depression) :-
+    member(fatigue, Symptoms),
+    member(no_motivation, Symptoms),
+    member(lack_of_sleep, Symptoms).
+
+diagnose(Symptoms, eczema) :-
+    member(itchy_skin, Symptoms),
+    member(rash, Symptoms).
+
+% Doctor suggestion based on diagnosis
+suggest_doctor(flu, "General Physician").
+suggest_doctor(heart_disease, "Cardiologist").
+suggest_doctor(allergy, "Allergist").
+suggest_doctor(migraine, "Neurologist").
+suggest_doctor(food_poisoning, "Gastroenterologist").
+suggest_doctor(asthma, "Pulmonologist").
+suggest_doctor(depression, "Psychiatrist").
+suggest_doctor(eczema, "Dermatologist").
+suggest_doctor(_, "General Physician").  
+
+Lisp file (.lsp):
+(defun suggest-advice (diagnosis)
+  (cond
+    ((equal diagnosis "flu") "Stay hydrated and rest well. Consider seeing a GP.")
+    ((equal diagnosis "heart_disease") "Avoid stress, monitor your BP, and consult a cardiologist.")
+    ((equal diagnosis "allergy") "Avoid known allergens and try antihistamines.")
+    ((equal diagnosis "migraine") "Rest in a dark room and avoid triggers like strong smells or light.")
+    ((equal diagnosis "food_poisoning") "Drink fluids and avoid solid food until symptoms ease.")
+    ((equal diagnosis "asthma") "Use your inhaler and avoid dusty or cold environments.")
+    ((equal diagnosis "depression") "Talk to someone you trust, and consider seeing a therapist.")
+    ((equal diagnosis "eczema") "Moisturize regularly and avoid scented products.")
+    (t "Please consult your physician.")))
+
+(format t "~a~%" (suggest-advice (nth 1 sb-ext:*posix-argv*)))
+
+HospitalFinder file :
+class HospitalFinder:
+    def __init__(self):
+        self.hospitals = {
+            "General Physician": ["General Hospital", "City Care Clinic"],
+            "Cardiologist": ["Heart Health Center", "Cardio Clinic"],
+            "Allergist": ["Allergy and Immunology Center", "City Allergy Clinic"],
+            "Neurologist": ["Day Institute", "NeuroCare Hospital"],
+            "Gastroenterologist": ["Uno Health Center", "Digestive Care Clinic"],
+            "Pulmonologist": ["Pulmonary Clinic", "Lung Health Center"],
+            "Psychiatrist": ["Mental Health Institute", "City Psychiatry Clinic"],
+            "Dermatologist": ["Skin Health Center", "DermCare Clinic"]
+        }
+
+    def find_hospitals(self, specialist):
+        return self.hospitals.get(specialist, [])
+
